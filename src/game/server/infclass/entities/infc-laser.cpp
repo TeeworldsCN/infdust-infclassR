@@ -54,7 +54,6 @@ bool CInfClassLaser::HitCharacter(vec2 From, vec2 To)
 		int MinimumHP = Config()->m_InfRevivalDamage + 1;
 		int MinimumInfected = 5;
 
-		char aBuf[256];
 		if(pMedic->GetHealthArmorSum() < MinimumHP)
 		{
 			GameServer()->SendBroadcast_Localization(m_Owner, BROADCAST_PRIORITY_GAMEANNOUNCE,
@@ -78,6 +77,7 @@ bool CInfClassLaser::HitCharacter(vec2 From, vec2 To)
 			int LastHumanClass = pHit->GetPlayer()->LastHumanClass();
 			pInfected->GetPlayer()->SetClass(LastHumanClass);
 			pInfected->Unfreeze();
+			pInfected->CancelSlowMotion();
 			pInfected->SetHealthArmor(1, 0);
 			pMedic->TakeDamage(vec2(0.f, 0.f), Config()->m_InfRevivalDamage * 2, m_Owner, DAMAGE_TYPE::MEDIC_REVIVAL);
 

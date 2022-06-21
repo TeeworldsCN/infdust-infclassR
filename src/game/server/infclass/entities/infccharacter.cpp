@@ -627,7 +627,7 @@ bool CInfClassCharacter::TakeDamage(vec2 Force, float FloatDmg, int From, DAMAGE
 		Mode = TAKEDAMAGEMODE::NOINFECTION;
 		if(!IsZombie())
 		{
-			Force *= 0.1;
+			Force *= 0.1f;
 		}
 	}
 
@@ -935,6 +935,12 @@ void CInfClassCharacter::UnlockPosition()
 	m_PositionLocked = false;
 }
 
+void CInfClassCharacter::CancelSlowMotion()
+{
+	m_SlowMotionTick = -1;
+	m_IsInSlowMotion = false;
+}
+
 void CInfClassCharacter::ResetMovementsInput()
 {
 	m_Input.m_Jump = 0;
@@ -1002,6 +1008,8 @@ void CInfClassCharacter::GetActualKillers(int GivenKiller, DAMAGE_TYPE DamageTyp
 	//   killer=sniper (insta-kill)
 	// - Sniper killed a merc-poisoned inf from unlocked position:
 	//   killer=sniper assistant=merc
+	// - Scientist spawns a WhiteHole which drags an infected and then the inf does selfkill:
+	//   killer=scientist
 	//
 	// - Hunter hammered a med poisoned by a slug:
 	//   killer=hunter (insta kill)
@@ -1051,13 +1059,13 @@ void CInfClassCharacter::GetActualKillers(int GivenKiller, DAMAGE_TYPE DamageTyp
 		}
 	}
 
-	if(IsFrozen())
+	if(IsFrozen() && (m_LastFreezer >= 0))
 	{
 		// The Freezer must be either the Killer or the Assistant
 		AddUnique(m_LastFreezer, &MustBeKillerOrAssistant);
 	}
 
-	ClientsArray HookersRightNow = m_LastHookers;
+	ClientsArray HookersRightNow;
 	if(m_LastHookerTick + 1 >= Server()->Tick())
 	{
 		// + 1 to still count hookers from the previous tick for the case if the
@@ -1084,7 +1092,7 @@ void CInfClassCharacter::GetActualKillers(int GivenKiller, DAMAGE_TYPE DamageTyp
 
 		if(m_LastFreezer >= 0)
 		{
-			Killers.Add(m_LastFreezer);
+			AddUnique(m_LastFreezer, &Killers);
 		}
 	}
 
@@ -1161,7 +1169,7 @@ void CInfClassCharacter::GetActualKillers(int GivenKiller, DAMAGE_TYPE DamageTyp
 	}
 
 	{
-		ClientsArray &Enforcers = DirectKill ? Killers : Assistants;
+		ClientsArray &Enforcers = DirectKill ? Assistants : Killers;
 
 		for(const EnforcerInfo &info : m_EnforcersInfo)
 		{
@@ -1174,6 +1182,20 @@ void CInfClassCharacter::GetActualKillers(int GivenKiller, DAMAGE_TYPE DamageTyp
 
 	int Killer = Killers.IsEmpty() ? GivenKiller : Killers.First();
 	int Assistant = -1;
+
+	if((Killer >= 0) && (GetCID() != Killer))
+	{
+		const CInfClassCharacter *pKiller = GameController()->GetCharacter(Killer);
+		if(pKiller && pKiller->m_LastHelper.m_Tick > 0)
+		{
+			// Check if the helper is in game
+			const CInfClassCharacter *pKillerHelper = GameController()->GetCharacter(pKiller->m_LastHelper.m_CID);
+			if(pKillerHelper)
+			{
+				AddUnique(pKiller->m_LastHelper.m_CID, &Assistants);
+			}
+		}
+	}
 
 	if(Killers.Size() > 1)
 	{
@@ -1206,17 +1228,6 @@ void CInfClassCharacter::GetActualKillers(int GivenKiller, DAMAGE_TYPE DamageTyp
 
 			Assistant = CID;
 			break;
-		}
-	}
-
-	if((Killer >= 0) && (Assistant < 0) && (GetCID() != Killer))
-	{
-		const CInfClassCharacter *pKiller = GameController()->GetCharacter(Killer);
-		if(pKiller && pKiller->m_LastHelper.m_Tick > 0)
-		{
-			// Check if the helper is in game
-			const CInfClassCharacter *pKillerHelper = GameController()->GetCharacter(pKiller->m_LastHelper.m_CID);
-			Assistant = pKillerHelper ? pKillerHelper->GetCID() : -1;
 		}
 	}
 

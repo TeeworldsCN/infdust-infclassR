@@ -879,7 +879,21 @@ void CGameContext::SendVoteSet(int ClientID)
 
 void CGameContext::SendVoteStatus(int ClientID, int Total, int Yes, int No)
 {
-	std::cout << "SendVoteStatus" << std::endl;
+	if(ClientID == -1)
+	{
+		for(int i = 0; i < MAX_CLIENTS; ++i)
+			if(Server()->ClientIngame(i))
+				SendVoteStatus(i, Total, Yes, No);
+		return;
+	}
+
+	if(Total > VANILLA_MAX_CLIENTS && m_apPlayers[ClientID] && m_apPlayers[ClientID]->GetClientVersion() <= VERSION_DDRACE)
+	{
+		Yes = float(Yes * VANILLA_MAX_CLIENTS) / float(Total);
+		No = float(No * VANILLA_MAX_CLIENTS) / float(Total);
+		Total = VANILLA_MAX_CLIENTS;
+	}
+
 	CNetMsg_Sv_VoteStatus Msg = {0};
 	Msg.m_Total = Total;
 	Msg.m_Yes = Yes;
@@ -928,12 +942,57 @@ void CGameContext::CheckPureTuning()
 
 void CGameContext::SendTuningParams(int ClientID)
 {
+	if(ClientID == -1)
+	{
+		for(int i = 0; i < MAX_CLIENTS; ++i)
+		{
+			if(m_apPlayers[i])
+			{
+				SendTuningParams(i);
+			}
+		}
+		return;
+	}
+
 	CheckPureTuning();
 
+	SendTuningParams(ClientID, m_Tuning);
+}
+
+void CGameContext::SendTuningParams(int ClientID, const CTuningParams &params)
+{
 	CMsgPacker Msg(NETMSGTYPE_SV_TUNEPARAMS);
-	int *pParams = (int *)&m_Tuning;
-	for(unsigned i = 0; i < sizeof(m_Tuning)/sizeof(int); i++)
-		Msg.AddInt(pParams[i]);
+	const int *pParams = (const int *)&params;
+
+	unsigned int Last = sizeof(m_Tuning) / sizeof(int);
+	if(m_apPlayers[ClientID])
+	{
+		int ClientVersion = m_apPlayers[ClientID]->GetClientVersion();
+		if(ClientVersion < VERSION_DDNET_EXTRATUNES)
+			Last = 33;
+		else if(ClientVersion < VERSION_DDNET_HOOKDURATION_TUNE)
+			Last = 37;
+		else if(ClientVersion < VERSION_DDNET_FIREDELAY_TUNE)
+			Last = 38;
+	}
+
+	for(unsigned i = 0; i < Last; i++)
+	{
+		if(i == 31) // PlayerCollision
+		{
+			// inverted to avoid client collision prediction
+			// (keep behavior introduced by commit 11c408e5dd8f3672b658ad0581f016be85a46011)
+			Msg.AddInt(0);
+		}
+		else if(i == 33) // JetpackStrength
+		{
+			Msg.AddInt(0);
+		}
+		else
+		{
+			Msg.AddInt(pParams[i]);
+		}
+	}
 	Server()->SendMsg(&Msg, MSGFLAG_VITAL, ClientID);
 }
 
@@ -3648,13 +3707,13 @@ bool CGameContext::ConHelp(IConsole::IResult *pResult)
 		Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "help", Server()->Localization()->Localize(pLanguage, _("Choose a help page with /help <page>")));
 		
 		Server()->Localization()->Format_L(Buffer, pLanguage, _("Available help pages: {str:PageList}"),
-			"PageList", "game, translate, msg, taxi",
+			"PageList", "game, translate, msg, mute, taxi",
 			NULL
 		);
 		Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "help", Buffer.buffer());
 		
 		Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "help", "engineer, soldier, scientist, biologist, looper, medic, hero, ninja, mercenary, sniper, whitehole");
-		Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "help", "smoker, hunter, bat, boomer, ghost, spider, ghoul, voodoo, undead, witch.");
+		Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "help", "smoker, hunter, bat, boomer, ghost, spider, ghoul, slug, voodoo, undead, witch.");
 	}
 	else
 	{
