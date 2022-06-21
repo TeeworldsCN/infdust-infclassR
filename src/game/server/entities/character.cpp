@@ -992,7 +992,7 @@ void CCharacter::Unfreeze()
 
 bool CCharacter::IsFrozen() const
 {
-	return m_IsFrozen > 0;
+	return m_IsFrozen;
 }
 
 bool CCharacter::IsInSlowMotion() const
@@ -1012,7 +1012,7 @@ void CCharacter::SlowMotionEffect(float Duration, int FromCID)
 		m_SlowMotionTick = NewSlowTick;
 		m_SlowEffectApplicant = FromCID;
 		m_IsInSlowMotion = true;
-		m_Core.m_Vel *= 0.4;
+		m_Core.m_Vel *= 0.4f;
 	}
 }
 

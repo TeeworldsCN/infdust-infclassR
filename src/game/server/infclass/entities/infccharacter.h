@@ -166,7 +166,7 @@ public:
 	bool IsInvisible() const;
 	bool IsInvincible() const; // Invincible here means "ignores all damage"
 	bool HasHallucination() const;
-	void TryUnfreeze() override;
+	void TryUnfreeze();
 	FREEZEREASON GetFreezeReason() const { return m_FreezeReason; }
 
 	bool IsBlind() const { return m_BlindnessTicks > 0; }
@@ -187,6 +187,8 @@ public:
 	bool PositionIsLocked() const;
 	void LockPosition();
 	void UnlockPosition();
+
+	void CancelSlowMotion();
 
 	void ResetMovementsInput();
 	void ResetHookInput();

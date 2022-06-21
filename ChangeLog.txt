@@ -1,3 +1,10 @@
+InfclassR v1.4.2
+- Fixed network clipping for looper and engineer walls
+- Fixed a re-connected player could still use humans
+  spawn after infection started (regression)
+- Fixed prediction for hook of locked Sniper
+- Fixed slow-motion effect kept after revive
+
 InfclassR v1.4.1
 - Fixed poison grenades 'no healing' effect
 - Fixed a memory leak on map client map generation

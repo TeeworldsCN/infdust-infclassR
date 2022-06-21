@@ -21,10 +21,10 @@ public:
 	int GetTick() { return m_LifeSpan; }
 
 private:
-	vec2 m_Pos2;
 	int m_LifeSpan;
-	array<int> m_IDs;
-	array<int> m_EndPointIDs;
+
+	int m_IDs[2];
+	int m_EndPointIDs[2];
 	const float g_BarrierMaxLength = 400.0;
 	const float g_BarrierRadius = 0.0;
 	int m_ParticleIDs[NUM_PARTICLES];

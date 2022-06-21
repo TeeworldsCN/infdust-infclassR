@@ -3,7 +3,7 @@
 # FindICU introduced in CMake 3.7
 cmake_minimum_required(VERSION 3.7)
 project(InfclassR
-    VERSION 1.4.1
+    VERSION 1.4.2
 )
 set(VERSION_SUFFIX "")
 
@@ -45,12 +45,55 @@ endif()
 find_package(MaxMindDB QUIET)
 set(GEOLOCATION_DEFAULT ${MaxMindDB_FOUND})
 
+set(USE_CONAN_DEFAULT FALSE)
+
+set(CONAN_SUPPORTED_PLATFORMS Linux Windows Darwin)
+if(TARGET_OS STREQUAL "windows")
+  set(USE_CONAN_DEFAULT TRUE)
+endif()
+
+option(USE_CONAN "Use Conan for dependencies" ${USE_CONAN_DEFAULT})
 option(GEOLOCATION "Enable geolocation support" ${GEOLOCATION_DEFAULT})
 option(MYSQL "Enable mysql support" OFF)
 
 # Set the default build type to Release
 if(NOT(CMAKE_BUILD_TYPE))
   set(CMAKE_BUILD_TYPE Release)
+endif()
+
+set(DBG $<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>)
+if(MSVC)
+   # Use static CRT
+  if(DBG)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MTd")
+  else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MT")
+  endif()
+endif()
+
+if(USE_CONAN)
+  list(APPEND CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}")
+  list(APPEND CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}")
+endif()
+
+if(USE_CONAN)
+  set(CMAKE_CXX_STANDARD 14)
+
+  include(cmake/conan.cmake)
+
+  conan_cmake_configure(
+    REQUIRES
+      icu/69.1
+      zlib/1.2.11
+    GENERATORS cmake_find_package
+  )
+
+  conan_cmake_autodetect(settings)
+
+  conan_cmake_install(PATH_OR_REFERENCE .
+                      BUILD missing
+                      REMOTE conancenter
+                      SETTINGS ${settings})
 endif()
 
 configure_file(src/game/version.h.in ${PROJECT_BINARY_DIR}/src/game/version.h @ONLY)
@@ -246,14 +289,14 @@ if(NOT CMAKE_CROSSCOMPILING)
   # quietly.
   find_package(PkgConfig)
 endif()
-find_package(ZLIB)
+find_package(ZLIB REQUIRED)
 find_package(Crypto)
 if(MYSQL)
   find_package(MySQL)
 else()
   set(MYSQL_LIBRARIES)
 endif()
-find_package(PythonInterp)
+find_package(PythonInterp REQUIRED)
 find_package(Threads)
 
 if(GEOLOCATION)
@@ -518,8 +561,8 @@ set_glob(GAME_SHARED GLOB src/game
 # A bit hacky, but these are needed to register all the UUIDs, even for stuff
 # that doesn't link game.
 set(ENGINE_UUID_SHARED
-  src/game/generated/protocol.cpp
-  src/game/generated/protocol.h
+  ${CMAKE_CURRENT_BINARY_DIR}/src/game/generated/protocol.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/src/game/generated/protocol.h
 )
 list(REMOVE_ITEM GAME_SHARED ${ENGINE_UUID_SHARED})
 set(GAME_GENERATED_SHARED
@@ -543,18 +586,43 @@ set(LIBS
 )
 
 # Targets
-add_library(engine-shared EXCLUDE_FROM_ALL STATIC ${ENGINE_INTERFACE} ${ENGINE_SHARED} ${BASE})
-add_library(game-shared EXCLUDE_FROM_ALL STATIC ${GAME_SHARED} ${GAME_GENERATED_SHARED} ${ENGINE_UUID_SHARED} ${teeuniverses_SOURCES})
+add_library(engine-shared EXCLUDE_FROM_ALL STATIC ${ENGINE_INTERFACE} ${ENGINE_SHARED} ${ENGINE_UUID_SHARED} ${BASE})
+add_library(game-shared EXCLUDE_FROM_ALL STATIC ${GAME_SHARED} ${GAME_GENERATED_SHARED} ${teeuniverses_SOURCES})
 list(APPEND TARGETS_OWN engine-shared game-shared)
+
+target_link_libraries(engine-shared PUBLIC
+  ZLIB::ZLIB
+)
+
+if(CRYPTO_FOUND)
+  target_link_libraries(engine-shared PUBLIC
+    OpenSSL::Crypto
+  )
+  target_compile_definitions(engine-shared PRIVATE CONF_OPENSSL)
+else()
+  target_link_libraries(engine-shared PUBLIC
+    md5
+  )
+endif()
+
+target_link_libraries(game-shared PUBLIC
+  ZLIB::ZLIB
+  ICU::i18n
+  ICU::uc
+)
 
 add_library(pnglite STATIC
   ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/external/pnglite/pnglite.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/external/pnglite/pnglite.h
 )
+target_link_libraries(pnglite PRIVATE ZLIB::ZLIB)
+
 target_include_directories(pnglite PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/external/pnglite
 )
 add_library(pnglite::pnglite ALIAS pnglite)
+
+list(APPEND TARGETS_DEP pnglite)
 
 include_directories(SYSTEM
   ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -683,15 +751,11 @@ set_glob(GAME_SERVER GLOB_RECURSE src/game/server
   teeinfo.h
 )
 set(GAME_GENERATED_SERVER
-  "src/game/generated/server_data.cpp"
-  "src/game/generated/server_data.h"
+  ${CMAKE_CURRENT_BINARY_DIR}/src/game/generated/server_data.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/src/game/generated/server_data.h
 )
 set(SERVER_SRC ${ENGINE_SERVER} ${GAME_SERVER} ${GAME_GENERATED_SERVER})
-if(TARGET_OS STREQUAL "windows")
-  set(SERVER_ICON "other/icons/DDNet-Server.rc")
-else()
-  set(SERVER_ICON)
-endif()
+set(SERVER_ICON)
 
 # Libraries
 set(LIBS_SERVER
@@ -800,7 +864,6 @@ target_link_libraries(Server ${LIBS_SERVER})
 list(APPEND TARGETS_OWN Server)
 list(APPEND TARGETS_LINK Server)
 
-target_link_libraries(Server md5)
 target_link_libraries(Server engine-shared)
 target_link_libraries(Server game-shared)
 target_link_libraries(Server ICU::i18n)
@@ -829,7 +892,7 @@ install(
   TARGETS
     Server
   DESTINATION
-    "${CMAKE_INSTALL_PREFIX}"
+    "."
 )
 install(
   FILES
@@ -837,7 +900,7 @@ install(
     "autoexec.cfg"
     "reset.cfg"
   DESTINATION
-    "${CMAKE_INSTALL_PREFIX}"
+    "."
 )
 install(
   FILES
@@ -845,13 +908,56 @@ install(
   RENAME
     "storage.cfg.example"
   DESTINATION
-    "${CMAKE_INSTALL_PREFIX}"
+    "."
 )
+
+set(CPACK_GENERATOR ZIP)
+include(CPack)
 
 ########################################################################
 # COMPILER-SPECIFICS
 ########################################################################
 
+set(TARGETS ${TARGETS_OWN} ${TARGETS_DEP})
+
+foreach(target ${TARGETS})
+  if(MSVC)
+    # Static CRT is set via CMAKE_CXX_FLAGS to fix compatibility with Conan
+    # target_compile_options(${target} PRIVATE $<$<NOT:${DBG}>:/MT> $<${DBG}:/MTd>) # Use static CRT
+    target_compile_options(${target} PRIVATE /MP) # Use multiple cores
+    target_compile_options(${target} PRIVATE /EHsc) # Only catch C++ exceptions with catch.
+    target_compile_options(${target} PRIVATE /GS) # Protect the stack pointer.
+    target_compile_options(${target} PRIVATE /wd4996) # Use of non-_s functions.
+    target_compile_options(${target} PRIVATE /utf-8) # Use UTF-8 for source files.
+  endif()
+  if(OUR_FLAGS_LINK)
+    target_link_libraries(${target} ${OUR_FLAGS_LINK})
+  endif()
+  if(OUR_FLAGS)
+    target_compile_options(${target} PRIVATE ${OUR_FLAGS})
+  endif()
+  if(DEFINE_FORTIFY_SOURCE)
+    if(MINGW)
+      target_compile_definitions(${target} PRIVATE $<$<NOT:$<CONFIG:Debug>>:_FORTIFY_SOURCE=0>) # Currently broken in MinGW, see https://sourceforge.net/p/mingw-w64/discussion/723798/thread/b9d24f041f/
+    else()
+      target_compile_definitions(${target} PRIVATE $<$<NOT:$<CONFIG:Debug>>:_FORTIFY_SOURCE=2>) # Detect some buffer overflows.
+    endif()
+  endif()
+endforeach()
+
 foreach(target ${TARGETS_OWN})
+  if(MSVC)
+    target_compile_options(${target} PRIVATE /wd4065) # switch statement contains 'default' but no 'case' labels
+    target_compile_options(${target} PRIVATE /wd4244) # Possible loss of data (float -> int, int -> float, etc.).
+    target_compile_options(${target} PRIVATE /wd4267) # Possible loss of data (size_t - int on win64).
+    target_compile_options(${target} PRIVATE /wd4800) # Implicit conversion of int to bool.
+  endif()
+
   target_compile_definitions(${target} PRIVATE $<$<CONFIG:Debug>:CONF_DEBUG>)
+endforeach()
+
+foreach(target ${TARGETS_DEP})
+  if(MSVC)
+    target_compile_options(${target} PRIVATE /W0)
+  endif()
 endforeach()

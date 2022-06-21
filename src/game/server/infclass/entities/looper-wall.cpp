@@ -16,6 +16,8 @@ CLooperWall::CLooperWall(CGameContext *pGameContext, vec2 Pos1, vec2 Pos2, int O
 	: CPlacedObject(pGameContext, CGameWorld::ENTTYPE_LOOPER_WALL, Pos1, Owner)
 {
 	m_InfClassObjectType = INFCLASS_OBJECT_TYPE_LOOPER_WALL;
+	m_InfClassObjectFlags = INFCLASS_OBJECT_FLAG_HAS_SECOND_POSITION;
+
 	if(distance(Pos1, Pos2) > g_BarrierMaxLength)
 	{
 		m_Pos2 = Pos1 + normalize(Pos2 - Pos1)*g_BarrierMaxLength;
@@ -24,39 +26,37 @@ CLooperWall::CLooperWall(CGameContext *pGameContext, vec2 Pos1, vec2 Pos2, int O
 	{
 		m_Pos2 = Pos2;
 	}
-	m_IDs.set_size(2);
-	for(int i=0; i<2; i++)
-	{
-		m_IDs[i] = Server()->SnapNewID();
-	}
 
 	m_LifeSpan = Server()->TickSpeed()*Config()->m_InfLooperBarrierLifeSpan;
 	GameWorld()->InsertEntity(this);
-	
-	m_EndPointIDs.set_size(2);
-	for(int i=0; i<2; i++)
+
+	for(int &ID : m_IDs)
 	{
-		m_EndPointIDs[i] = Server()->SnapNewID();
+		ID = Server()->SnapNewID();
 	}
-	for(int i=0; i<NUM_PARTICLES; i++)
+	for(int &ID : m_EndPointIDs)
 	{
-		m_ParticleIDs[i] = Server()->SnapNewID();
+		ID = Server()->SnapNewID();
+	}
+	for(int &ID : m_ParticleIDs)
+	{
+		ID = Server()->SnapNewID();
 	}
 }
 
 CLooperWall::~CLooperWall()
 {
-	for(int i=0; i<2; i++)
+	for(int ID : m_ParticleIDs)
 	{
-		Server()->SnapFreeID(m_EndPointIDs[i]);
+		Server()->SnapFreeID(ID);
 	}
-	for(int i=0; i<NUM_PARTICLES; i++)
+	for(int ID : m_EndPointIDs)
 	{
-		Server()->SnapFreeID(m_ParticleIDs[i]);
+		Server()->SnapFreeID(ID);
 	}
-	for(int i=0; i<2; i++)
+	for(int ID : m_IDs)
 	{
-		Server()->SnapFreeID(m_IDs[i]);
+		Server()->SnapFreeID(ID);
 	}
 }
 
@@ -127,11 +127,7 @@ void CLooperWall::Snap(int SnappingClient)
 		if(!pInfClassObject)
 			return;
 
-		pInfClassObject->m_Flags = INFCLASS_OBJECT_FLAG_HAS_SECOND_POSITION;
 		pInfClassObject->m_LifeSpan = m_LifeSpan;
-
-		pInfClassObject->m_X2 = m_Pos2.x;
-		pInfClassObject->m_Y2 = m_Pos2.y;
 	}
 
 	// Laser dieing animation

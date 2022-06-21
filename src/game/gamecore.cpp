@@ -8,11 +8,10 @@
 
 const char *CTuningParams::ms_apNames[] =
 {
-	#define MACRO_TUNING_PARAM(Name,ScriptName,Value) #ScriptName,
+	#define MACRO_TUNING_PARAM(Name, ScriptName, Value, Description) #ScriptName,
 	#include "tuning.h"
 	#undef MACRO_TUNING_PARAM
 };
-
 
 bool CTuningParams::Set(int Index, float Value)
 {
@@ -49,14 +48,14 @@ bool CTuningParams::Get(const char *pName, float *pValue) const
 
 float HermiteBasis1(float v)
 {
-	return 2*v*v*v - 3*v*v+1;
+	return 2 * v * v * v - 3 * v * v + 1;
 }
 
 float VelocityRamp(float Value, float Start, float Range, float Curvature)
 {
 	if(Value < Start)
 		return 1.0f;
-	return 1.0f/powf(Curvature, (Value-Start)/Range);
+	return 1.0f / powf(Curvature, (Value - Start) / Range);
 }
 
 const float CCharacterCore::PhysicalSize = 28.0f;
@@ -66,6 +65,7 @@ void CCharacterCore::Init(CWorldCore *pWorld, CCollision *pCollision)
 {
 	m_pWorld = pWorld;
 	m_pCollision = pCollision;
+	Reset();
 }
 
 void CCharacterCore::Reset()
@@ -431,32 +431,35 @@ void CCharacterCore::Move(CParams* pParams)
 	{
 		// check player collision
 		float Distance = distance(m_Pos, NewPos);
-		int End = Distance+1;
-		vec2 LastPos = m_Pos;
-		for(int i = 0; i < End; i++)
+		if(Distance > 0)
 		{
-			float a = i/Distance;
-			vec2 Pos = mix(m_Pos, NewPos, a);
-			for(int p = 0; p < MAX_CLIENTS; p++)
+			int End = Distance + 1;
+			vec2 LastPos = m_Pos;
+			for(int i = 0; i < End; i++)
 			{
-				CCharacterCore *pCharCore = m_pWorld->m_apCharacters[p];
-				if(!pCharCore || pCharCore == this)
-					continue;
-				if (!m_Infected && !pCharCore->m_Infected)
-					continue;
-				if ((m_Infected && pCharCore->m_Infected) && (m_HookProtected || pCharCore->m_HookProtected))
-					continue;
-				float D = distance(Pos, pCharCore->m_Pos);
-				if(D < 28.0f && D > 0.0f)
+				float a = i / Distance;
+				vec2 Pos = mix(m_Pos, NewPos, a);
+				for(int p = 0; p < MAX_CLIENTS; p++)
 				{
-					if(a > 0.0f)
-						m_Pos = LastPos;
-					else if(distance(NewPos, pCharCore->m_Pos) > D)
-						m_Pos = NewPos;
-					return;
+					CCharacterCore *pCharCore = m_pWorld->m_apCharacters[p];
+					if(!pCharCore || pCharCore == this)
+						continue;
+					if (!m_Infected && !pCharCore->m_Infected)
+						continue;
+					if ((m_Infected && pCharCore->m_Infected) && (m_HookProtected || pCharCore->m_HookProtected))
+						continue;
+					float D = distance(Pos, pCharCore->m_Pos);
+					if(D < 28.0f && D >= 0.0f)
+					{
+						if(a > 0.0f)
+							m_Pos = LastPos;
+						else if(distance(NewPos, pCharCore->m_Pos) > D)
+							m_Pos = NewPos;
+						return;
+					}
 				}
+				LastPos = Pos;
 			}
-			LastPos = Pos;
 		}
 	}
 
